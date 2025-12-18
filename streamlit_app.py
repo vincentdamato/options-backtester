@@ -1,9 +1,9 @@
 """
-Options Strategy Backtester - Professional Portal
-==================================================
+Options Play Screener - Find Exact Trades
+==========================================
 
-Clean, modern single-page interface for options backtesting.
-Real market data only. No synthetic data.
+Scans the market to find the best options plays RIGHT NOW.
+No more guessing - the screener tells you exactly what to trade.
 
 Run with: streamlit run streamlit_app.py
 """
@@ -11,17 +11,15 @@ Run with: streamlit run streamlit_app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
+from datetime import datetime
 import sys
 from pathlib import Path
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
-from backtester import OptionsBacktester, BacktestResult, StrategyType
+from backtester import OptionsBacktester
 from patterns import PatternAnalyzer
 from data_fetcher import DataPreparator
 
@@ -30,700 +28,351 @@ from data_fetcher import DataPreparator
 # =============================================================================
 
 st.set_page_config(
-    page_title="Options Backtester",
-    page_icon="◉",
+    page_title="Options Screener",
+    page_icon="◎",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # =============================================================================
-# PROFESSIONAL CSS STYLING
+# CSS STYLING
 # =============================================================================
 
 st.markdown("""
 <style>
-    /* Import clean fonts */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
-    /* Global font */
-    html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
+    html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+    #MainMenu, footer, header { visibility: hidden; }
+    .main .block-container { padding-top: 2rem; padding-bottom: 2rem; max-width: 1400px; }
     
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    .main-title { font-size: 2.25rem; font-weight: 600; color: #1a1a2e; margin-bottom: 0.25rem; }
+    .subtitle { font-size: 1rem; color: #6b7280; margin-bottom: 2rem; }
     
-    /* Main container */
-    .main .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-        max-width: 1400px;
-    }
-    
-    /* Header styling */
-    .main-title {
-        font-size: 2.25rem;
-        font-weight: 600;
-        color: #1a1a2e;
-        margin-bottom: 0.25rem;
-        letter-spacing: -0.5px;
-    }
-    
-    .subtitle {
-        font-size: 1rem;
-        color: #6b7280;
-        font-weight: 400;
-        margin-bottom: 2rem;
-    }
-    
-    /* Card styling */
     .card {
-        background: #ffffff;
-        border-radius: 16px;
-        padding: 1.5rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
-        border: 1px solid #f0f0f0;
-        margin-bottom: 1rem;
+        background: #ffffff; border-radius: 16px; padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #f0f0f0; margin-bottom: 1rem;
     }
-    
-    .card-header {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: #6b7280;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 1rem;
-    }
-    
-    /* Metric styling */
-    .metric-value {
-        font-size: 1.75rem;
-        font-weight: 600;
-        color: #1a1a2e;
-        line-height: 1.2;
-    }
-    
-    .metric-label {
-        font-size: 0.8rem;
-        color: #9ca3af;
-        font-weight: 500;
-        margin-top: 0.25rem;
-    }
-    
+    .card-header { font-size: 0.75rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+    .metric-value { font-size: 1.5rem; font-weight: 600; color: #1a1a2e; }
+    .metric-label { font-size: 0.8rem; color: #9ca3af; margin-top: 0.25rem; }
     .metric-positive { color: #10b981; }
     .metric-negative { color: #ef4444; }
     
-    /* Button styling - cushioned/pill style */
     .stButton > button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        padding: 0.75rem 2rem;
-        font-weight: 600;
-        font-size: 0.95rem;
-        letter-spacing: 0.3px;
-        transition: all 0.3s ease;
+        color: white; border: none; border-radius: 12px; padding: 0.75rem 2rem;
+        font-weight: 600; font-size: 0.95rem; transition: all 0.3s ease;
         box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
     }
+    .stButton > button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5); }
     
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+    .play-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 20px; padding: 1.75rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;
+        margin-bottom: 1.25rem; transition: all 0.3s ease;
     }
+    .play-card:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
+    .play-ticker { font-size: 1.5rem; font-weight: 700; color: #1a1a2e; }
+    .play-strategy { font-size: 0.9rem; font-weight: 600; color: #667eea; text-transform: uppercase; letter-spacing: 0.5px; }
+    .play-details { display: flex; gap: 1.5rem; margin-top: 1rem; flex-wrap: wrap; }
+    .play-stat { text-align: center; }
+    .play-stat-value { font-size: 1.25rem; font-weight: 600; color: #1a1a2e; }
+    .play-stat-label { font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; }
     
-    .stButton > button:active {
-        transform: translateY(0);
-    }
+    .signal-badge { display: inline-block; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; margin-right: 0.5rem; margin-bottom: 0.5rem; }
+    .signal-bullish { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+    .signal-bearish { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
+    .signal-neutral { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
     
-    /* Secondary button */
-    .secondary-btn > button {
-        background: #f3f4f6;
-        color: #374151;
-        box-shadow: none;
-    }
+    .score-excellent { background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 0.5rem 1rem; border-radius: 12px; font-weight: 700; font-size: 1.1rem; }
+    .score-good { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 0.5rem 1rem; border-radius: 12px; font-weight: 700; font-size: 1.1rem; }
+    .score-moderate { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 0.5rem 1rem; border-radius: 12px; font-weight: 700; font-size: 1.1rem; }
     
-    .secondary-btn > button:hover {
-        background: #e5e7eb;
-        box-shadow: none;
-    }
-    
-    /* Input styling */
-    .stSelectbox > div > div,
-    .stTextInput > div > div > input,
-    .stNumberInput > div > div > input {
-        border-radius: 10px;
-        border: 1.5px solid #e5e7eb;
-        font-family: 'Inter', sans-serif;
-    }
-    
-    .stSelectbox > div > div:focus-within,
-    .stTextInput > div > div > input:focus,
-    .stNumberInput > div > div > input:focus {
-        border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-    
-    /* Slider styling */
-    .stSlider > div > div > div > div {
-        background: #667eea;
-    }
-    
-    /* Table styling */
-    .dataframe {
-        font-family: 'Inter', sans-serif !important;
-        font-size: 0.875rem;
-    }
-    
-    .dataframe th {
-        background: #f9fafb !important;
-        font-weight: 600 !important;
-        color: #374151 !important;
-    }
-    
-    /* Section divider */
-    .section-divider {
-        height: 1px;
-        background: linear-gradient(90deg, transparent, #e5e7eb, transparent);
-        margin: 2rem 0;
-    }
-    
-    /* Signal badges */
-    .signal-active {
-        background: linear-gradient(135deg, #10b981, #059669);
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 600;
-        display: inline-block;
-    }
-    
-    .signal-inactive {
-        background: #f3f4f6;
-        color: #6b7280;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 600;
-        display: inline-block;
-    }
-    
-    /* Results table */
-    .results-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-    
-    .results-table th {
-        background: #f9fafb;
-        padding: 1rem;
-        text-align: left;
-        font-weight: 600;
-        color: #374151;
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    .results-table td {
-        padding: 1rem;
-        border-top: 1px solid #f0f0f0;
-        color: #1f2937;
-    }
-    
-    /* Expander styling */
-    .streamlit-expanderHeader {
-        font-weight: 600;
-        font-size: 0.95rem;
-        color: #374151;
-        background: #f9fafb;
-        border-radius: 10px;
-    }
-    
-    /* Tab styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 0;
-        background: #f3f4f6;
-        border-radius: 12px;
-        padding: 4px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 10px;
-        padding: 0.75rem 1.5rem;
-        font-weight: 500;
-        color: #6b7280;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: white;
-        color: #1a1a2e;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    
-    /* Chart container */
-    .chart-container {
-        background: white;
-        border-radius: 16px;
-        padding: 1rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-    
-    /* Status indicators */
-    .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 8px;
-    }
-    
-    .status-green { background: #10b981; }
-    .status-red { background: #ef4444; }
-    .status-yellow { background: #f59e0b; }
-    
+    .section-divider { height: 1px; background: linear-gradient(90deg, transparent, #e5e7eb, transparent); margin: 2rem 0; }
+    .filter-section { background: #f8fafc; border-radius: 16px; padding: 1.25rem; margin-bottom: 1.5rem; }
+    .no-plays { text-align: center; padding: 3rem; color: #6b7280; }
+    .scanning { display: inline-block; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 </style>
 """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# WATCHLISTS
+# =============================================================================
+
+WATCHLISTS = {
+    "Popular ETFs": ["SPY", "QQQ", "IWM", "DIA", "TLT", "GLD", "SLV", "XLF", "XLE", "XLK"],
+    "Mega Cap Tech": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD", "NFLX", "CRM"],
+    "High IV Names": ["TSLA", "NVDA", "AMD", "COIN", "RIVN", "PLTR", "SOFI", "MARA", "SQ", "SHOP"],
+    "Dividend Stocks": ["JNJ", "PG", "KO", "PEP", "MCD", "WMT", "HD", "V", "MA", "UNH"],
+    "Custom": []
+}
+
+
+# =============================================================================
+# SCREENER FUNCTIONS
+# =============================================================================
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_ticker_data(ticker: str, years: int = 2):
+    try:
+        prep = DataPreparator()
+        data = prep.prepare_backtest_data(ticker, period=f"{years}y")
+        return data if not data.empty and len(data) >= 100 else None
+    except:
+        return None
+
+
+def analyze_ticker(ticker: str, data: pd.DataFrame) -> dict:
+    if data is None or len(data) < 100:
+        return None
+    
+    try:
+        current_price = data['close'].iloc[-1]
+        current_vix = data['vix'].iloc[-1]
+        
+        # RSI
+        delta = data['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+        rsi = (100 - (100 / (1 + gain/loss))).iloc[-1]
+        
+        # IV percentile
+        iv = data['iv'].iloc[-1]
+        iv_percentile = (data['iv'] < iv).mean() * 100
+        
+        # BB
+        sma20 = data['close'].rolling(20).mean().iloc[-1]
+        std20 = data['close'].rolling(20).std().iloc[-1]
+        bb_pct = (current_price - (sma20 - 2*std20)) / (4*std20)
+        
+        # Price changes
+        price_change_1d = (current_price / data['close'].iloc[-2] - 1) * 100
+        
+        # Signals and scoring
+        signals = []
+        score = 50
+        
+        if current_vix > 25:
+            signals.append(("VIX SPIKE", "bullish")); score += 15
+        elif current_vix > 20:
+            signals.append(("Elevated VIX", "neutral")); score += 8
+        
+        if iv_percentile > 80:
+            signals.append(("HIGH IV", "bullish")); score += 20
+        elif iv_percentile > 60:
+            signals.append(("Above Avg IV", "neutral")); score += 10
+        
+        if rsi < 30:
+            signals.append(("OVERSOLD", "bullish")); score += 15
+        elif rsi > 70:
+            signals.append(("OVERBOUGHT", "bearish")); score += 10
+        
+        if bb_pct < 0.1:
+            signals.append(("BELOW BB", "bullish")); score += 10
+        elif bb_pct > 0.9:
+            signals.append(("ABOVE BB", "bearish")); score += 8
+        
+        # Determine strategy
+        if iv_percentile > 60 and current_vix > 18:
+            if rsi < 40:
+                best_strategy, strategy_reason = "Short Put", "High IV + Oversold = Sell puts"
+            else:
+                best_strategy, strategy_reason = "Iron Condor", "High IV + Neutral = Sell condors"
+        elif rsi < 30:
+            best_strategy, strategy_reason = "Short Put", "Oversold bounce play"
+        else:
+            best_strategy, strategy_reason = "Iron Condor", "Neutral conditions"
+        
+        # Quick backtest
+        bt = OptionsBacktester(data)
+        if best_strategy == "Short Put":
+            result = bt.backtest_short_put(delta_target=-0.16, dte_target=45, profit_target=0.5, stop_loss=2.0)
+        else:
+            result = bt.backtest_iron_condor(put_delta=-0.16, call_delta=0.16, dte_target=45, profit_target=0.5, stop_loss=2.0)
+        
+        if result.profit_factor > 1.5: score += 20
+        elif result.profit_factor > 1.0: score += 10
+        elif result.profit_factor < 0.8: score -= 15
+        
+        score = min(100, max(0, score))
+        
+        return {
+            'ticker': ticker, 'price': current_price, 'price_change_1d': price_change_1d,
+            'vix': current_vix, 'rsi': rsi, 'iv_percentile': iv_percentile,
+            'signals': signals, 'score': score, 'best_strategy': best_strategy,
+            'strategy_reason': strategy_reason, 'win_rate': result.win_rate,
+            'profit_factor': result.profit_factor, 'num_trades': result.num_trades, 'data': data
+        }
+    except:
+        return None
+
+
+def scan_watchlist(tickers: list, progress_callback=None) -> list:
+    opportunities = []
+    for i, ticker in enumerate(tickers):
+        if progress_callback:
+            progress_callback(i / len(tickers), f"Scanning {ticker}...")
+        data = fetch_ticker_data(ticker)
+        if data is not None:
+            analysis = analyze_ticker(ticker, data)
+            if analysis and analysis['score'] >= 40:
+                opportunities.append(analysis)
+    opportunities.sort(key=lambda x: x['score'], reverse=True)
+    return opportunities
 
 
 # =============================================================================
 # HEADER
 # =============================================================================
 
-st.markdown('<p class="main-title">◉ Options Strategy Backtester</p>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Quantitative analysis for options traders • Real market data</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-title">◎ Options Play Screener</p>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Find the best options trades right now • Real-time market scanning</p>', unsafe_allow_html=True)
 
 
 # =============================================================================
-# TOP CONTROLS - Single Row
+# FILTERS
 # =============================================================================
 
-col1, col2, col3, col4, col5 = st.columns([1.5, 1, 1, 1, 1])
+st.markdown('<div class="filter-section">', unsafe_allow_html=True)
+col1, col2, col3, col4 = st.columns([2, 1.5, 1.5, 1])
 
 with col1:
-    symbol = st.text_input("Symbol", value="SPY", label_visibility="collapsed", placeholder="Enter symbol (e.g., SPY)")
+    watchlist_choice = st.selectbox("Watchlist", list(WATCHLISTS.keys()), index=0)
+    if watchlist_choice == "Custom":
+        custom_tickers = st.text_input("Enter tickers (comma separated)", placeholder="AAPL, MSFT, GOOGL")
+        tickers = [t.strip().upper() for t in custom_tickers.split(",") if t.strip()]
+    else:
+        tickers = WATCHLISTS[watchlist_choice]
 
 with col2:
-    years = st.selectbox("History", [1, 2, 3, 5, 10], index=2, format_func=lambda x: f"{x} Year{'s' if x > 1 else ''}")
+    strategy_filter = st.selectbox("Strategy", ["All", "Premium Selling", "Directional"])
 
 with col3:
-    strategy_type = st.selectbox("Strategy", ["Short Put", "Iron Condor", "Long Straddle", "Compare All"])
+    min_score = st.selectbox("Min Score", [40, 50, 60, 70, 80], index=1, format_func=lambda x: f"{x}+")
 
 with col4:
-    dte_target = st.selectbox("DTE", [21, 30, 45, 60, 90], index=2, format_func=lambda x: f"{x} DTE")
+    scan_btn = st.button("🔍 Scan", type="primary", use_container_width=True)
 
-with col5:
-    run_backtest = st.button("Run Analysis", type="primary", use_container_width=True)
-
-
-# =============================================================================
-# LOAD DATA
-# =============================================================================
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_real_data(sym: str, yrs: int):
-    """Load real market data from Yahoo Finance"""
-    try:
-        prep = DataPreparator()
-        data = prep.prepare_backtest_data(sym, period=f"{yrs}y")
-        if data.empty:
-            return None, "No data available"
-        return data, None
-    except Exception as e:
-        return None, str(e)
-
-
-# Load data
-with st.spinner(""):
-    data, error = load_real_data(symbol.upper(), years)
-
-if error:
-    st.error(f"⚠️ Could not load data for {symbol}: {error}")
-    st.stop()
+st.markdown('</div>', unsafe_allow_html=True)
 
 
 # =============================================================================
-# MARKET OVERVIEW CARDS
+# SCANNING
 # =============================================================================
 
-st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-
-col1, col2, col3, col4, col5 = st.columns(5)
-
-current_price = data['close'].iloc[-1]
-price_change = (data['close'].iloc[-1] / data['close'].iloc[-2] - 1) * 100
-current_vix = data['vix'].iloc[-1]
-
-# Calculate RSI
-delta = data['close'].diff()
-gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-rs = gain / loss
-current_rsi = (100 - (100 / (1 + rs))).iloc[-1]
-
-with col1:
-    st.markdown(f"""
-    <div class="card">
-        <div class="card-header">Current Price</div>
-        <div class="metric-value">${current_price:.2f}</div>
-        <div class="metric-label {'metric-positive' if price_change >= 0 else 'metric-negative'}">
-            {'▲' if price_change >= 0 else '▼'} {abs(price_change):.2f}% today
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col2:
-    st.markdown(f"""
-    <div class="card">
-        <div class="card-header">VIX Level</div>
-        <div class="metric-value">{current_vix:.1f}</div>
-        <div class="metric-label">{'High' if current_vix > 25 else 'Normal' if current_vix > 15 else 'Low'} volatility</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col3:
-    st.markdown(f"""
-    <div class="card">
-        <div class="card-header">RSI (14)</div>
-        <div class="metric-value">{current_rsi:.1f}</div>
-        <div class="metric-label">{'Overbought' if current_rsi > 70 else 'Oversold' if current_rsi < 30 else 'Neutral'}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col4:
-    iv_proxy = data['iv'].iloc[-1] * 100
-    st.markdown(f"""
-    <div class="card">
-        <div class="card-header">IV Estimate</div>
-        <div class="metric-value">{iv_proxy:.1f}%</div>
-        <div class="metric-label">Implied volatility</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col5:
-    st.markdown(f"""
-    <div class="card">
-        <div class="card-header">Data Range</div>
-        <div class="metric-value">{len(data):,}</div>
-        <div class="metric-label">Trading days</div>
-    </div>
-    """, unsafe_allow_html=True)
+if scan_btn or 'scan_results' not in st.session_state:
+    if tickers:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        def update_progress(pct, text):
+            progress_bar.progress(pct)
+            status_text.markdown(f'<span class="scanning">⟳ {text}</span>', unsafe_allow_html=True)
+        
+        opportunities = scan_watchlist(tickers, update_progress)
+        progress_bar.empty()
+        status_text.empty()
+        
+        st.session_state['scan_results'] = opportunities
+        st.session_state['scan_time'] = datetime.now()
 
 
 # =============================================================================
-# MAIN CONTENT AREA
+# RESULTS
 # =============================================================================
 
-st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-
-# Two column layout: Settings + Results
-left_col, right_col = st.columns([1, 2.5])
-
-with left_col:
-    st.markdown("#### ⚙️ Parameters")
+if 'scan_results' in st.session_state:
+    opportunities = st.session_state['scan_results']
+    scan_time = st.session_state.get('scan_time', datetime.now())
     
-    with st.container():
-        delta_target = st.slider(
-            "Delta Target",
-            min_value=0.05,
-            max_value=0.50,
-            value=0.16,
-            step=0.01,
-            help="Strike selection: 0.16 = ~84% OTM"
-        )
-        
-        profit_target = st.slider(
-            "Profit Target",
-            min_value=25,
-            max_value=100,
-            value=50,
-            step=5,
-            format="%d%%",
-            help="Exit at this % of max profit"
-        )
-        
-        stop_loss = st.slider(
-            "Stop Loss",
-            min_value=1.0,
-            max_value=5.0,
-            value=2.0,
-            step=0.5,
-            format="%.1fx",
-            help="Exit at this multiple of credit"
-        )
-        
-        signal_filter = st.selectbox(
-            "Entry Signal",
-            ["Premium Sell", "VIX Spike", "BB Squeeze", "RSI Reversal", "No Filter"],
-            help="Only enter when signal is active"
-        )
-        
-        # Map display names to internal names
-        signal_map = {
-            "Premium Sell": "premium_sell",
-            "VIX Spike": "vix_spike", 
-            "BB Squeeze": "bb_squeeze",
-            "RSI Reversal": "rsi_reversal",
-            "No Filter": "none"
-        }
-
-with right_col:
-    # Run backtest when button clicked or on first load
-    if run_backtest or 'backtest_results' not in st.session_state:
-        with st.spinner("Analyzing..."):
-            bt = OptionsBacktester(data)
-            results = []
-            
-            signal_key = signal_map.get(signal_filter, "premium_sell")
-            
-            if strategy_type in ["Short Put", "Compare All"]:
-                result = bt.backtest_short_put(
-                    delta_target=-delta_target,
-                    dte_target=dte_target,
-                    profit_target=profit_target/100,
-                    stop_loss=stop_loss,
-                    signal_filter=signal_key if signal_key != "none" else "premium_sell",
-                    signal_threshold=0.5 if signal_key != "none" else 0.0
-                )
-                results.append(("Short Put", result))
-            
-            if strategy_type in ["Iron Condor", "Compare All"]:
-                result = bt.backtest_iron_condor(
-                    put_delta=-delta_target,
-                    call_delta=delta_target,
-                    dte_target=dte_target,
-                    profit_target=profit_target/100,
-                    stop_loss=stop_loss,
-                    signal_filter=signal_key if signal_key != "none" else "premium_sell",
-                    signal_threshold=0.5 if signal_key != "none" else 0.0
-                )
-                results.append(("Iron Condor", result))
-            
-            if strategy_type in ["Long Straddle", "Compare All"]:
-                result = bt.backtest_long_straddle(
-                    dte_target=dte_target,
-                    profit_target=(profit_target/100) * 2,
-                    stop_loss=profit_target/100,
-                    signal_filter="bb_squeeze" if signal_key == "none" else signal_key,
-                    signal_threshold=0.5
-                )
-                results.append(("Long Straddle", result))
-            
-            st.session_state['backtest_results'] = results
+    # Filter
+    if strategy_filter == "Premium Selling":
+        opportunities = [o for o in opportunities if o['best_strategy'] in ["Short Put", "Iron Condor"]]
+    elif strategy_filter == "Directional":
+        opportunities = [o for o in opportunities if o['best_strategy'] == "Short Put"]
     
-    # Display results
-    if 'backtest_results' in st.session_state:
-        results = st.session_state['backtest_results']
-        
-        # Best strategy callout
-        best = max(results, key=lambda x: x[1].profit_factor)
-        
-        if best[1].profit_factor > 1.0:
-            st.success(f"✓ **{best[0]}** shows positive edge with {best[1].profit_factor:.2f}x profit factor")
-        else:
-            st.warning(f"⚠️ No strategy shows consistent edge in this period")
-        
-        # Results table
-        st.markdown("#### 📊 Backtest Results")
-        
-        results_df = pd.DataFrame([{
-            'Strategy': name,
-            'Trades': r.num_trades,
-            'Win Rate': f"{r.win_rate*100:.1f}%",
-            'Profit Factor': r.profit_factor,
-            'Avg Win': f"${r.avg_win:.0f}",
-            'Avg Loss': f"${r.avg_loss:.0f}",
-            'Total Return': f"{r.total_return*100:.1f}%",
-            'Max DD': f"{r.max_drawdown*100:.1f}%",
-            'Sharpe': f"{r.sharpe_ratio:.2f}"
-        } for name, r in results])
-        
-        # Style the dataframe
-        def style_profit_factor(val):
-            if isinstance(val, float):
-                color = '#10b981' if val > 1.0 else '#ef4444'
-                return f'color: {color}; font-weight: 600'
-            return ''
-        
-        styled_df = results_df.style.applymap(
-            style_profit_factor, 
-            subset=['Profit Factor']
-        ).format({'Profit Factor': '{:.2f}'})
-        
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
-        
-        # Equity curves
-        st.markdown("#### 📈 Equity Curves")
-        
-        fig = go.Figure()
-        colors = ['#667eea', '#10b981', '#f59e0b']
-        
-        for i, (name, r) in enumerate(results):
-            fig.add_trace(go.Scatter(
-                y=r.equity_curve.values,
-                mode='lines',
-                name=name,
-                line=dict(color=colors[i % len(colors)], width=2.5)
-            ))
-        
-        fig.update_layout(
-            height=350,
-            margin=dict(l=0, r=0, t=30, b=0),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family='Inter'),
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            ),
-            xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickformat='$,.0f')
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+    opportunities = [o for o in opportunities if o['score'] >= min_score]
+    
+    # Summary
+    st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown(f'<div class="card"><div class="card-header">Found</div><div class="metric-value">{len(opportunities)}</div><div class="metric-label">opportunities</div></div>', unsafe_allow_html=True)
+    with col2:
+        avg_score = np.mean([o['score'] for o in opportunities]) if opportunities else 0
+        st.markdown(f'<div class="card"><div class="card-header">Avg Score</div><div class="metric-value">{avg_score:.0f}</div><div class="metric-label">quality</div></div>', unsafe_allow_html=True)
+    with col3:
+        high_iv = len([o for o in opportunities if o['iv_percentile'] > 70])
+        st.markdown(f'<div class="card"><div class="card-header">High IV</div><div class="metric-value">{high_iv}</div><div class="metric-label">setups</div></div>', unsafe_allow_html=True)
+    with col4:
+        st.markdown(f'<div class="card"><div class="card-header">Scanned</div><div class="metric-value">{scan_time.strftime("%H:%M")}</div><div class="metric-label">{scan_time.strftime("%b %d")}</div></div>', unsafe_allow_html=True)
+    
+    # Play Cards
+    st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+    st.markdown("### 🎯 Top Plays")
+    
+    if not opportunities:
+        st.markdown('<div class="no-plays"><h3>No plays found</h3><p>Try lowering minimum score or changing watchlist</p></div>', unsafe_allow_html=True)
+    else:
+        for opp in opportunities[:10]:
+            score_class = "score-excellent" if opp['score'] >= 75 else "score-good" if opp['score'] >= 60 else "score-moderate"
+            signals_html = "".join([f'<span class="signal-badge signal-{t}">{n}</span>' for n, t in opp['signals']])
+            price_color = "metric-positive" if opp['price_change_1d'] >= 0 else "metric-negative"
+            arrow = "▲" if opp['price_change_1d'] >= 0 else "▼"
+            
+            st.markdown(f"""
+            <div class="play-card">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <div class="play-ticker">{opp['ticker']}</div>
+                        <div class="play-strategy">{opp['best_strategy']}</div>
+                        <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #6b7280;">{opp['strategy_reason']}</div>
+                    </div>
+                    <div class="{score_class}">{opp['score']}</div>
+                </div>
+                <div style="margin-top: 1rem;">{signals_html}</div>
+                <div class="play-details">
+                    <div class="play-stat"><div class="play-stat-value">${opp['price']:.2f}</div><div class="play-stat-label">Price</div></div>
+                    <div class="play-stat"><div class="play-stat-value {price_color}">{arrow} {abs(opp['price_change_1d']):.1f}%</div><div class="play-stat-label">1D Chg</div></div>
+                    <div class="play-stat"><div class="play-stat-value">{opp['iv_percentile']:.0f}%</div><div class="play-stat-label">IV Rank</div></div>
+                    <div class="play-stat"><div class="play-stat-value">{opp['rsi']:.0f}</div><div class="play-stat-label">RSI</div></div>
+                    <div class="play-stat"><div class="play-stat-value">{opp['win_rate']*100:.0f}%</div><div class="play-stat-label">Win Rate</div></div>
+                    <div class="play-stat"><div class="play-stat-value">{opp['profit_factor']:.2f}x</div><div class="play-stat-label">Profit Factor</div></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.expander(f"📊 {opp['ticker']} Chart & Details"):
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    fig = go.Figure(go.Candlestick(
+                        x=opp['data'].index[-60:], open=opp['data']['open'].iloc[-60:],
+                        high=opp['data']['high'].iloc[-60:], low=opp['data']['low'].iloc[-60:],
+                        close=opp['data']['close'].iloc[-60:],
+                        increasing_line_color='#10b981', decreasing_line_color='#ef4444'
+                    ))
+                    fig.update_layout(height=280, margin=dict(l=0,r=0,t=10,b=0), xaxis_rangeslider_visible=False, showlegend=False)
+                    st.plotly_chart(fig, use_container_width=True)
+                with c2:
+                    st.markdown(f"""
+                    **Suggested Setup:**
+                    - Strategy: **{opp['best_strategy']}**
+                    - Delta: **16Δ** (~84% OTM)
+                    - DTE: **45 days**
+                    - Take Profit: **50%**
+                    - Stop Loss: **2x credit**
+                    
+                    **Backtest Stats:**
+                    - Trades: {opp['num_trades']}
+                    - Win Rate: {opp['win_rate']*100:.0f}%
+                    - Profit Factor: {opp['profit_factor']:.2f}x
+                    """)
 
-
-# =============================================================================
-# PATTERN ANALYSIS & SIGNALS
-# =============================================================================
-
+# Footer
 st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-
-st.markdown("#### 🎯 Current Market Signals")
-
-analyzer = PatternAnalyzer(data)
-predictions = analyzer.predict_next_opportunity()
-
-signal_col1, signal_col2, signal_col3, signal_col4 = st.columns(4)
-
-# Premium Sell Signal
-premium_active = current_vix > 15 and 35 < current_rsi < 65
-with signal_col1:
-    status = "signal-active" if premium_active else "signal-inactive"
-    st.markdown(f"""
-    <div class="card" style="text-align: center;">
-        <div class="{status}">{'ACTIVE' if premium_active else 'WAIT'}</div>
-        <div style="margin-top: 0.75rem; font-weight: 600; color: #374151;">Premium Sell</div>
-        <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.25rem;">VIX + RSI favorable</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# VIX Spike Signal
-vix_spike = current_vix > 25
-with signal_col2:
-    status = "signal-active" if vix_spike else "signal-inactive"
-    st.markdown(f"""
-    <div class="card" style="text-align: center;">
-        <div class="{status}">{'ACTIVE' if vix_spike else 'WAIT'}</div>
-        <div style="margin-top: 0.75rem; font-weight: 600; color: #374151;">VIX Spike</div>
-        <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.25rem;">Mean reversion setup</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# RSI Signal
-rsi_signal = current_rsi < 30 or current_rsi > 70
-with signal_col3:
-    status = "signal-active" if rsi_signal else "signal-inactive"
-    label = "Oversold" if current_rsi < 30 else "Overbought" if current_rsi > 70 else "Neutral"
-    st.markdown(f"""
-    <div class="card" style="text-align: center;">
-        <div class="{status}">{'ACTIVE' if rsi_signal else 'WAIT'}</div>
-        <div style="margin-top: 0.75rem; font-weight: 600; color: #374151;">RSI Reversal</div>
-        <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.25rem;">{label}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# BB Squeeze
-bb_squeeze = 'bb_squeeze' in predictions and predictions['bb_squeeze'].get('probability', 0) > 0.5
-with signal_col4:
-    status = "signal-active" if bb_squeeze else "signal-inactive"
-    st.markdown(f"""
-    <div class="card" style="text-align: center;">
-        <div class="{status}">{'ACTIVE' if bb_squeeze else 'WAIT'}</div>
-        <div style="margin-top: 0.75rem; font-weight: 600; color: #374151;">BB Squeeze</div>
-        <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.25rem;">Breakout pending</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# =============================================================================
-# PRICE CHART
-# =============================================================================
-
-st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-
-st.markdown("#### 📉 Price History")
-
-# Create subplots
-fig = make_subplots(
-    rows=2, cols=1,
-    shared_xaxes=True,
-    vertical_spacing=0.08,
-    row_heights=[0.7, 0.3],
-    subplot_titles=(f'{symbol.upper()} Price', 'RSI (14)')
-)
-
-# Candlestick chart
-fig.add_trace(go.Candlestick(
-    x=data.index[-252:],  # Last year
-    open=data['open'].iloc[-252:],
-    high=data['high'].iloc[-252:],
-    low=data['low'].iloc[-252:],
-    close=data['close'].iloc[-252:],
-    name='Price',
-    increasing_line_color='#10b981',
-    decreasing_line_color='#ef4444'
-), row=1, col=1)
-
-# RSI
-rsi_series = 100 - (100 / (1 + rs))
-fig.add_trace(go.Scatter(
-    x=data.index[-252:],
-    y=rsi_series.iloc[-252:],
-    mode='lines',
-    name='RSI',
-    line=dict(color='#667eea', width=1.5)
-), row=2, col=1)
-
-# RSI levels
-fig.add_hline(y=70, line_dash="dash", line_color="#ef4444", line_width=1, row=2, col=1)
-fig.add_hline(y=30, line_dash="dash", line_color="#10b981", line_width=1, row=2, col=1)
-
-fig.update_layout(
-    height=500,
-    margin=dict(l=0, r=0, t=30, b=0),
-    paper_bgcolor='rgba(0,0,0,0)',
-    plot_bgcolor='rgba(0,0,0,0)',
-    font=dict(family='Inter'),
-    showlegend=False,
-    xaxis_rangeslider_visible=False
-)
-
-fig.update_xaxes(showgrid=True, gridcolor='#f5f5f5')
-fig.update_yaxes(showgrid=True, gridcolor='#f5f5f5')
-
-st.plotly_chart(fig, use_container_width=True)
-
-
-# =============================================================================
-# FOOTER
-# =============================================================================
-
-st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-
-st.markdown("""
-<div style="text-align: center; color: #9ca3af; font-size: 0.8rem; padding: 1rem 0;">
-    Options Strategy Backtester • Built for VINCENT DAMATO <br>
-    <span style="color: #d1d5db;">Data provided by Yahoo Finance • For educational purposes only</span>
-</div>
-""", unsafe_allow_html=True)
+st.markdown('<div style="text-align:center;color:#9ca3af;font-size:0.8rem;">Options Play Screener • Data by Yahoo Finance • Educational purposes only</div>', unsafe_allow_html=True)
